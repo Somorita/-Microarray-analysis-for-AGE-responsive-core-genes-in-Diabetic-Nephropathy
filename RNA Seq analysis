@@ -1,0 +1,143 @@
+############################################################
+# RNA-seq Analysis from GEO FPKM Matrix (Clean Version)
+# Author: Somorita Baishya
+# Purpose: PCA, DE analysis, heatmaps, volcano plot, correlation with microarray
+############################################################
+
+# Load libraries
+library(readxl)
+library(limma)
+library(pheatmap)
+library(ggplot2)
+library(ggrepel)
+library(tibble)
+library(dplyr)
+
+# -------------------------------
+# 1. Load FPKM matrix
+# -------------------------------
+fpkm_data <- read_excel("GSE299230/GSE299230_All_sample_FPKM.xlsx")
+
+# Set first row as column names
+colnames(fpkm_data) <- fpkm_data[1, ]
+fpkm_data <- fpkm_data[-1, ]
+
+# First column is gene names → set as rownames
+rownames(fpkm_data) <- fpkm_data[[1]]
+fpkm_data <- fpkm_data[, -1]
+
+# Convert to numeric
+log2_fpkm <- log2(apply(fpkm_data, 2, as.numeric) + 1)
+rownames(log2_fpkm) <- rownames(fpkm_data)
+
+# -------------------------------
+# 2. Filter genes (FPKM > 1 in ≥2 samples)
+# -------------------------------
+keep_genes <- rowSums(log2_fpkm > log2(1 + 1)) >= 2
+log2_fpkm <- log2_fpkm[keep_genes, ]
+
+# -------------------------------
+# 3. PCA
+# -------------------------------
+group <- factor(c("Control", "Control", "Control", "Treatment", "Treatment", "Treatment"))
+pca <- prcomp(t(log2_fpkm), scale. = TRUE)
+
+plot(pca$x[,1:2], col=c(rep("blue", 3), rep("red", 3)), pch=19,
+     xlab="PC1", ylab="PC2", main="PCA of Samples")
+legend("bottomright", legend=c("Control", "Treatment"), col=c("blue", "red"), pch=19)
+
+# -------------------------------
+# 4. Differential Expression (limma)
+# -------------------------------
+design <- model.matrix(~ group)
+fit <- lmFit(log2_fpkm, design)
+fit <- eBayes(fit)
+
+deg_results <- topTable(fit, coef="groupTreatment", number=Inf, adjust.method="BH")
+deg_filtered <- deg_results[deg_results$adj.P.Val < 0.01 & abs(deg_results$logFC) > 0, ]
+
+# Save DEGs
+write.csv(rownames_to_column(deg_filtered, var="Gene"),
+          file="degs_rna.csv", row.names=FALSE)
+
+# -------------------------------
+# 5. Volcano Plot
+# -------------------------------
+deg_plot <- deg_filtered %>%
+  rownames_to_column(var = "Gene") %>%
+  mutate(Significance = case_when(
+    adj.P.Val < 0.01 & logFC > 0  ~ "Up",
+    adj.P.Val < 0.01 & logFC < 0  ~ "Down",
+    TRUE                          ~ "Not Sig"
+  ))
+
+# Genes to label (e.g., microarray hits)
+microarray_genes <- c("ACKR4","ACTB","ACTN1","ACTR3","ACVR2A","ARPC1B","ARPC3","BAIAP2","BIRC3","BMP5")
+label_genes <- intersect(deg_plot$Gene, microarray_genes)
+
+ggplot(deg_plot, aes(x = logFC, y = -log10(adj.P.Val), color = Significance)) +
+  geom_point(alpha = 0.7, size = 1.8) +
+  scale_color_manual(values = c("Up" = "red", "Down" = "blue", "Not Sig" = "grey")) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_hline(yintercept = -log10(0.01), linetype = "dashed") +
+  geom_text_repel(
+    data = subset(deg_plot, Gene %in% label_genes),
+    aes(label = Gene),
+    size = 3,
+    max.overlaps = Inf,
+    box.padding = 0.3,
+    segment.color = "black",
+    segment.size = 0.3
+  ) +
+  theme_bw() +
+  labs(
+    title = "Volcano Plot of RNA-seq DEGs",
+    x = expression(Log[2]~Fold~Change),
+    y = expression(-Log[10]~adj.P.Val)
+  ) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        legend.title = element_blank())
+
+# -------------------------------
+# 6. Heatmap of selected genes
+# -------------------------------
+common_genes <- microarray_genes[microarray_genes %in% rownames(log2_fpkm)]
+subset_matrix <- log2_fpkm[common_genes, ]
+
+annotation_col <- data.frame(Group = group)
+rownames(annotation_col) <- colnames(subset_matrix)
+
+pheatmap(subset_matrix,
+         scale = "row",
+         annotation_col = annotation_col,
+         cluster_cols = FALSE,
+         cluster_rows = TRUE,
+         fontsize_row = 8,
+         main = "Heatmap - Selected Genes")
+
+# -------------------------------
+# 7. Correlation with microarray (example)
+# -------------------------------
+# Load microarray logFC
+microarray_data <- read.csv("DEGs.csv", row.names=1)
+micro_subset <- microarray_data[rownames(microarray_data) %in% common_genes, "logFC", drop=FALSE]
+rna_subset <- deg_filtered[rownames(deg_filtered) %in% common_genes, "logFC", drop=FALSE]
+
+combined <- merge(rownames_to_column(micro_subset, "Gene"),
+                  rownames_to_column(rna_subset, "Gene"),
+                  by = "Gene", suffixes = c("_micro", "_rna"))
+
+# Spearman correlation
+correlation <- cor.test(combined$logFC_micro, combined$logFC_rna, method="spearman")
+
+# Plot correlation
+plot(combined$logFC_micro, combined$logFC_rna,
+     xlab = "Microarray logFC", ylab = "RNA-seq logFC",
+     main = "Spearman Correlation of logFC",
+     pch = 19, col = "darkgreen")
+abline(lm(logFC_rna ~ logFC_micro, data = combined), col = "red", lty = 2)
+text(combined$logFC_micro, combined$logFC_rna, labels=combined$Gene, pos=3, cex=0.7)
+legend("topright",
+       legend = paste0("Spearman rho = ", round(correlation$estimate,3),
+                       "\np = ", signif(correlation$p.value,3)),
+       bty="n", cex=0.8)
