@@ -26,7 +26,7 @@ library(msigdbr)
 # -------------------------------
 # 1. Load CEL files
 # -------------------------------
-cel_dir <- "C:/Users/shona/Documents/30122"
+cel_dir <- "C:/Users/Documents/30122"
 cel_files <- list.celfiles(cel_dir, full.names = TRUE)
 cat("CEL files found:\n")
 print(cel_files)
@@ -52,7 +52,7 @@ boxplot(normalized_expr, main = "After RMA Normalization",
 
 # Save normalized expression
 write.csv(normalized_expr_df, 
-          file = "C:/Users/shona/Documents/30122/normalized_expression.csv", 
+          file = "C:/Users/shona////Documents/30122/normalized_expression.csv", 
           row.names = TRUE)
 
 # -------------------------------
@@ -80,7 +80,7 @@ average_expr <- expr_with_symbols %>%
   column_to_rownames("Gene Symbol")
 
 write.csv(average_expr, 
-          file = "C:/Users/shona/Documents/30122/average_expression.csv", 
+          file = "C:/Users/Documents/30122/average_expression.csv", 
           row.names = TRUE)
 
 # -------------------------------
@@ -101,7 +101,7 @@ deg <- topTable(fit2, number = Inf, adjust.method = "BH") %>%
   filter(abs(logFC) > 0 & P.Value < 0.01)
 
 write.csv(deg, 
-          file = "C:/Users/shona/Documents/30122/DEGs_logFC0_p001.csv", 
+          file = "C:/Users/Documents/30122/DEGs_logFC0_p001.csv", 
           row.names = FALSE)
 
 # -------------------------------
@@ -129,14 +129,14 @@ go_bp <- enrichGO(gene = gene_list, universe = gene_universe,
                   OrgDb = org.Hs.eg.db, ont = "BP", keyType = "ENTREZID",
                   pAdjustMethod = "BH", pvalueCutoff = 0.05)
 dotplot(go_bp, showCategory = 15)
-write.csv(go_bp, file = "C:/Users/shona/Documents/30122/GO_BP_enrichment.csv", row.names = FALSE)
+write.csv(go_bp, file = "C:/Users/Documents/30122/GO_BP_enrichment.csv", row.names = FALSE)
 
 # -------------------------------
 # 9. KEGG enrichment
 # -------------------------------
 kegg_res <- enrichKEGG(gene = gene_list, organism = "hsa")
 dotplot(kegg_res, showCategory = 15)
-write.csv(kegg_res, file = "C:/Users/shona/Documents/30122/KEGG_enrichment.csv", row.names = FALSE)
+write.csv(kegg_res, file = "C:/Users/Documents/30122/KEGG_enrichment.csv", row.names = FALSE)
 
 # -------------------------------
 # 10. GSEA
@@ -147,7 +147,7 @@ rankings <- setNames(deg$logFC, deg$Gene.Symbol)
 gsea_res <- fgsea(pathways = split(hallmark_df$gene_symbol, hallmark_df$gs_name),
                   stats = rankings, minSize = 15, maxSize = 500, nperm = 10000)
 head(gsea_res)
-write.csv(gsea_res, file = "C:/Users/shona/Documents/30122/GSEA_results.csv", row.names = FALSE)
+write.csv(gsea_res, file = "C:/Users/Documents/30122/GSEA_results.csv", row.names = FALSE)
 
 ##########################################
 # End of workflow
